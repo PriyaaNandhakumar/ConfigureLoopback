@@ -63,8 +63,8 @@ def check_loopback_configuration(hostname, username, password):
         ssh_session = client.invoke_shell()
 
         # Send a command to display interface information
-        #ssh_session.send("show interfaces brief | include Loopback0\n")
-        ssh_session.send("show ip interface brief")
+        ssh_session.send("show interfaces brief | include Loopback0\n")
+        
 
         # Wait for the command to complete and collect output
         output = ""
