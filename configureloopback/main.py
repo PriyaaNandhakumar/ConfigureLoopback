@@ -4,146 +4,189 @@
 # Created By  : Priyaa Elumalai
 # Created Date: 28/9/2023
 # =============================================================================
-"""The Module Has Been Build to configure loopback interface"""
+"""The Module Has Been Build to configure loopback interface using netmiko module"""
 # =============================================================================
 # Imports
 # =============================================================================
 from flask import Flask, request, jsonify
-import paramiko
-import re
+from netmiko import ConnectHandler
+from tabulate import tabulate
+
 
 #Create a Flask application
 app = Flask(__name__)
 
 
+########  Supporting Functions for Routes #########
+def connectionstring(data):
+    hostname = data["hostname"]
+    username = data["username"]
+    password = data["password"]
+    
+    device_params = {
+    'device_type': 'cisco_xr',
+    'ip': hostname,
+    'username': username,
+    'password': password,
+    }
+    
+    return device_params
 
-def configure_loopback(hostname, username, password, loopback_ip, subnet_mask):
+def configure_loopback_interface(device_params, interface_number, ip_address):
     try:
-        # Create an SSH client
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
-        # Connect to the device
-        client.connect(hostname, username=username, password=password, timeout=10)
-        
-        # Create an SSH session
-        ssh_session = client.invoke_shell()
-        
-        # Send commands to configure the loopback interface
-        ssh_session.send("configure terminal\n")
-        ssh_session.send(f"interface Loopback0\n")
-        ssh_session.send(f"ip address {loopback_ip} {subnet_mask}\n")
-        ssh_session.send("end\n")
-        
-        # Wait for the command to complete
-        while True:
-            output = ssh_session.recv(65535).decode("utf-8")
-            if re.search(r"#", output):
-                break
-        
-        # Close the SSH session and connection
-        ssh_session.close()
-        client.close()
-        
-        return "Loopback interface configured successfully."
+        # Connect to the IOS XR device
+        net_connect = ConnectHandler(**device_params)
+        net_connect.enable()
+
+        # Construct the CLI command
+        command = [
+            f'interface Loopback{interface_number}',
+            f'ip address {ip_address}',
+            'commit',
+            'end',
+        ]
+
+        # Send the commands to the device
+        output = net_connect.send_config_set(command)
+
+        # Close the SSH connection
+        net_connect.disconnect()
+        return {'message': 'Interface configured successfully.', 'output': output}, 200
 
     except Exception as e:
-        return str(e)
+        return {'message': str(e)}, 500
 
-def check_loopback_configuration(hostname, username, password):
+def show_loopback_interface(device_params,interface_number):
     try:
-        # Create an SSH client
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # Connect to the IOS XR device
+        net_connect = ConnectHandler(**device_params)
+        net_connect.enable()
 
-        # Connect to the device
-        client.connect(hostname, username=username, password=password, timeout=10)
+        # Construct the CLI command
+        command = f'show running-config interface Loopback{interface_number}'
 
-        # Create an SSH session
-        ssh_session = client.invoke_shell()
+        # Send the command to the device
+        output = net_connect.send_command(command)
 
-        # Send a command to display interface information
-        #ssh_session.send("show interfaces brief | include Loopback0\n")
-        #ssh_session.send("show running-config interface Loopback0")
-        ssh_session.send("show ip interface brief")
+        # Close the SSH connection
+        net_connect.disconnect()
 
-        # Wait for the command to complete and collect output
-        output = ""
-        while True:
-            recv_data = ssh_session.recv(65535).decode("utf-8")
-            output += recv_data
-            if re.search(r"#", recv_data):
-                break
-
-        # Close the SSH session and connection
-        ssh_session.close()
-        client.close()
-        # Check if the output contains information about Loopback0
-        if re.search(r"Loopback0", output):
-            return "Loopback interface is configured."
-        else:
-            return "Loopback interface is not configured."
+        return {'message': 'Interface configuration:', 'output': output}, 200
 
     except Exception as e:
-        return str(e)
-
-def delete_loopback_config(hostname, username, password, interface_number):
-    try:
-        # Establish SSH connection to the router
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh_client.connect(hostname, username=username, password=password)
-
-        # Construct and execute the command to delete the loopback interface
-        command = f"no interface Loopback{interface_number}"
-        stdin, stdout, stderr = ssh_client.exec_command(command)
-
-        # Check for errors
-        error_message = stderr.read().decode()
-        if error_message:
-            return jsonify({'message': f'Error: {error_message}'}), 500
-
-        ssh_client.close()
-    except Exception as e:
-        return jsonify({'message': f'Error: {str(e)}'}), 500
+        return {'message': str(e)}, 500
         
+        
+def delete_loopback_interface(device_params,interface_number):
+    try:
+        # Connect to the IOS XR device
+        net_connect = ConnectHandler(**device_params)
+        net_connect.enable()
+
+        # Construct the CLI command to delete the loopback interface
+        delete_command = [
+            f'configure terminal',
+            f'no interface Loopback{interface_number}',
+            'commit',
+            'end',
+        ]
+
+        # Send the delete command to the device
+        output = net_connect.send_config_set(delete_command)
+
+        # Close the SSH connection
+        net_connect.disconnect()
+
+        return {'message': 'Interface deleted successfully.', 'output': output}, 200
+
+    except Exception as e:
+        return {'message': str(e)}, 500        
+
+def list_loopback_interface(device_params):
+    try:
+        # Connect to the IOS XR device
+        net_connect = ConnectHandler(**device_params)
+        net_connect.enable()
+
+        # Construct the CLI command
+        command = f'show interfaces description'
+
+        # Send the command to the device
+        output = net_connect.send_command(command)
+        # Close the SSH connection
+        net_connect.disconnect()
+
+        # Split the output into lines and remove leading/trailing spaces
+        output_lines = [line.strip() for line in output.splitlines()]
+
+        # Remove header and empty lines
+        output_lines = [line for line in output_lines if line and not line.startswith('Interface')]
+
+        # Split each line into columns using whitespace as a delimiter
+        table_data = [line.split() for line in output_lines]
+
+        # Print the table using tabulate
+        print(tabulate(table_data, headers=['Interface', 'Description'], tablefmt='grid'))
+
+        # Close the SSH connection
+        net_connect.disconnect()
+
+        return {'message': 'Interface configuration:', 'output': output}, 200
+
+    except Exception as e:
+        return {'message': str(e)}, 500
+
+
+ ##############################   Routes  #################################
+
+ 
 @app.route('/configure_loopback', methods=['POST'])
 def configure_loopback_route():
     data = request.json
-    hostname = data.get('hostname')
-    username = data.get('username')
-    password = data.get('password')
+    device_params=connectionstring(data)
     loopback_ip = data.get('loopback_ip')
-    subnet_mask = data.get('subnet_mask')
-
-    result = configure_loopback(hostname, username, password, loopback_ip, subnet_mask)
-
-    return jsonify({'result': result})
-
-@app.route('/check_loopback_configured', methods=['POST'])
-def check_loopback_configured():
-    data = request.json
-    hostname = data.get('hostname')
-    username = data.get('username')
-    password = data.get('password')
+    interface_number = data.get('interface_number')
     
-    result = check_loopback_configuration(hostname, username, password)
+    result = configure_loopback_interface(device_params, interface_number, loopback_ip)
 
     return jsonify({'result': result})
 
 
+@app.route('/show_loopback', methods=['POST'])
+def show_loopback():
+    data = request.json
+    device_params=connectionstring(data)
+    interface_number = data.get('interface_number')
+    
+    if not interface_number:
+        return {'message': 'interface_number is required as a query parameter.'}, 400
+    
+    result, status_code = show_loopback_interface(device_params,interface_number)
+    return jsonify(result), status_code
+    
+    
 @app.route('/delete_loopback', methods=['POST'])
 def delete_loopback():
-    data = request.json
-    hostname = data.get('hostname')
-    username = data.get('username')
-    password = data.get('password')
-    interfacenumber = data.get('interfacenumber')
+    data = request.get_json()
+    device_params=connectionstring(data)
+    interface_number = data.get('interface_number')
     
-    result = delete_loopback_config(hostname, username, password, interfacenumber)
+    if not interface_number:
+        return {'message': 'interface_number is required.'}, 400
+    
+    result, status_code = delete_loopback_interface(device_params,interface_number)
+    return jsonify(result), status_code    
 
-    return jsonify({'result': result})
+@app.route('/list_loopback', methods=['POST'])
+def list_loopback():
+    data = request.get_json()
+    device_params=connectionstring(data)
     
+    
+    result, status_code = list_loopback_interface(device_params)
+    return jsonify(result), status_code  
+
+
 if __name__ == '__main__':
     app.run(debug=True)
 
