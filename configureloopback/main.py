@@ -10,7 +10,8 @@
 # =============================================================================
 from flask import Flask, request, jsonify
 from netmiko import ConnectHandler
-import re
+from tabulate import tabulate
+
 
 #Create a Flask application
 app = Flask(__name__)
@@ -101,6 +102,41 @@ def delete_loopback_interface(device_params,interface_number):
     except Exception as e:
         return {'message': str(e)}, 500        
 
+def list_loopback_interface(device_params):
+    try:
+        # Connect to the IOS XR device
+        net_connect = ConnectHandler(**device_params)
+        net_connect.enable()
+
+        # Construct the CLI command
+        command = f'show interfaces description'
+
+        # Send the command to the device
+        output = net_connect.send_command(command)
+        # Close the SSH connection
+        net_connect.disconnect()
+
+        # Split the output into lines and remove leading/trailing spaces
+        output_lines = [line.strip() for line in output.splitlines()]
+
+        # Remove header and empty lines
+        output_lines = [line for line in output_lines if line and not line.startswith('Interface')]
+
+        # Split each line into columns using whitespace as a delimiter
+        table_data = [line.split() for line in output_lines]
+
+        # Print the table using tabulate
+        print(tabulate(table_data, headers=['Interface', 'Description'], tablefmt='grid'))
+
+        # Close the SSH connection
+        net_connect.disconnect()
+
+        return {'message': 'Interface configuration:', 'output': output}, 200
+
+    except Exception as e:
+        return {'message': str(e)}, 500
+
+
  ##############################   Routes  #################################
 
  
@@ -140,7 +176,17 @@ def delete_loopback():
     
     result, status_code = delete_loopback_interface(device_params,interface_number)
     return jsonify(result), status_code    
+
+@app.route('/list_loopback', methods=['POST'])
+def list_loopback():
+    data = request.get_json()
+    device_params=connectionstring(data)
     
+    
+    result, status_code = list_loopback_interface(device_params)
+    return jsonify(result), status_code  
+
+
 if __name__ == '__main__':
     app.run(debug=True)
 
