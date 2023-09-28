@@ -34,7 +34,6 @@ def configure_loopback_interface(device_params, interface_number, ip_address):
 
         # Close the SSH connection
         net_connect.disconnect()
-
         return {'message': 'Interface configured successfully.', 'output': output}, 200
 
     except Exception as e:
