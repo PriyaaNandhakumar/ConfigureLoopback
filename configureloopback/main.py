@@ -15,7 +15,6 @@ import re
 #Create a Flask application
 app = Flask(__name__)
 
-
 def configure_loopback_interface(device_params, interface_number, ip_address):
     try:
         # Connect to the IOS XR device
