@@ -50,6 +50,4 @@ jobs:
           
       working-directory: "./configureloopback"
         
-    - name: Cleanup
-      run: |
-        docker image rm -f gcr.io/${{ secrets.PROD_GCP_PROJECT_ID }}/IOSXR-LoopbackConfiguration
+    
